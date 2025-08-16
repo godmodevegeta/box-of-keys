@@ -26,7 +26,11 @@ async def lifespan(app: FastAPI):
     
     # Skip Redis initialization in test environment
     if settings.ENVIRONMENT != "test":
-        await init_redis()
+        try:
+            await init_redis()
+        except Exception as e:
+            logger.warning(f"Redis initialization failed: {e}")
+            # Continue without Redis in development
     
     logger.info("KeyHaven Pro API started successfully")
     

@@ -10,6 +10,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.main import app
 from app.core.database import get_db, Base
+# Import models so they're available for table creation
+from app.models.user import User, Team
 
 
 # Test database URL (in-memory SQLite for testing)
@@ -38,20 +40,23 @@ def event_loop():
 
 
 @pytest.fixture
-async def db_session() -> AsyncGenerator[AsyncSession, None]:
+async def db_session() -> AsyncSession:
     """Create a test database session"""
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     
     async with TestSessionLocal() as session:
-        yield session
+        try:
+            yield session
+        finally:
+            await session.rollback()
     
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
 
 
 @pytest.fixture
-def client(db_session: AsyncSession) -> TestClient:
+def client() -> TestClient:
     """Create a test client with database dependency override"""
     
     # Set test environment
@@ -68,7 +73,11 @@ def client(db_session: AsyncSession) -> TestClient:
     config.settings = test_settings
     
     async def override_get_db():
-        yield db_session
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        
+        async with TestSessionLocal() as session:
+            yield session
     
     test_app.dependency_overrides[get_db] = override_get_db
     
